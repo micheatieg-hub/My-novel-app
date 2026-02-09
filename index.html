@@ -1,0 +1,218 @@
+<!DOCTYPE html><html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Silent Hour – Novel App</title>
+<style>
+body { background:#0f1220; color:#eaeaf0; font-family:Inter, Arial, sans-serif; padding:24px; }
+.container { max-width:800px; margin:auto; }
+.card { background:#171a2f; padding:28px; border-radius:16px; margin-bottom:24px; }
+a { color:#6c7cff; text-decoration:none; }
+h1,h2,h3 { font-family:Georgia; }
+input, textarea, select { width:100%; padding:10px; margin:10px 0; border-radius:8px; border:1px solid #6c7cff; background:#0f1220; color:#eaeaf0; }
+button { width:48%; padding:10px; margin:5px 1%; border:none; border-radius:8px; background:#6c7cff; color:white; cursor:pointer; }
+button:hover { background:#515aff; }
+.hidden { display:none; }
+.comment { background:#1e2137; padding:8px; margin:6px 0; border-radius:8px; }
+@media(max-width:600px){ button{width:100%; margin:6px 0;} }
+</style>
+</head>
+<body>
+<div id="loading" style="position:fixed;inset:0;background:#0f1220;display:flex;align-items:center;justify-content:center;color:#6c7cff;z-index:9999;">Loading…</div>
+<div class="container">
+<h1>📖 The Silent Hour</h1>
+<p>Written by Tieg • Weekly updates</p><!-- LOGIN / SIGNUP --><div class="card hidden" id="loginCard">
+  <h2>🔑 Login / Sign Up</h2>
+  <input type="email" id="email" placeholder="Email">
+  <input type="password" id="password" placeholder="Password">
+  <input type="password" id="confirmPassword" placeholder="Confirm Password (Sign Up)">
+  <button onclick="login()">Login</button>
+  <button onclick="signup()">Sign Up</button>
+  <p><a href="#" onclick="forgotPassword()">Forgot Password?</a></p>
+</div><div class="card hidden" id="logoutCard">
+  <button onclick="logout()">Logout</button>
+</div><div id="content" class="hidden"><!-- BOOKMARK --><div class="card hidden" id="bookmarkCard">
+  <h2>⭐ Continue Reading</h2>
+  <p id="lastReadText"></p>
+  <a id="continueLink" href="#">👉 Continue</a>
+</div><!-- CHAPTERS --><div class="card">
+<h2>📚 Chapters</h2>
+<div id="chapterList"></div>
+</div><!-- COMMENTS --><div class="card">
+<h3>💬 Comments</h3>
+<select id="chapterSelect"></select>
+<textarea id="commentInput" placeholder="Write a comment..."></textarea>
+<button onclick="postComment()">Post Comment</button>
+<div id="commentList"></div>
+</div><!-- ADMIN PANEL --><div class="card hidden" id="adminPanel">
+<h2>🛠 Admin Panel</h2>
+<p>Total Comments: <span id="totalComments">0</span></p>
+<button onclick="deleteAllComments()">Delete All Comments</button>
+<h3>👥 Online Users (<span id="onlineCount">0</span>)</h3>
+<ul id="onlineUsers"></ul>
+<hr>
+<h3>Add New Chapter</h3>
+<input id="newChapterTitle" placeholder="Chapter Title">
+<textarea id="newChapterContent" placeholder="Chapter Content"></textarea>
+<button onclick="addNewChapter()">Post Chapter</button>
+</div></div><script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+import { getAuth, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+
+const firebaseConfig = { apiKey: "AIzaSyD9PdBAZzQeZbb4z1_vC-Nlc9v46xVMQ6E", authDomain: "my-novel-app-ce68b.firebaseapp.com", projectId: "my-novel-app-ce68b", storageBucket: "my-novel-app-ce68b.appspot.com", messagingSenderId: "1040625911547", appId: "1:1040625911547:web:0ba4fc967c05664fdd925e", measurementId: "G-76F21G6ZT5" };
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+setPersistence(auth, browserLocalPersistence);
+const adminEmail = "tiegmicheal@gmail.com";
+
+// --- Helper for fallback ---
+function safeParseJSON(str, fallback) { try{ return JSON.parse(str) } catch(e){ return fallback } }
+
+// --- Load Chapters ---
+async function loadChapters(){
+  chapterList.innerHTML="";
+  chapterSelect.innerHTML="";
+  let docs = [];
+  try {
+    const snap = await getDocs(collection(db,'chapters'));
+    snap.forEach(d=>docs.push({id:d.id,...d.data()}));
+  } catch(e){
+    console.warn('Firebase failed, using localStorage');
+    docs = safeParseJSON(localStorage.getItem('chapters'),[]);
+  }
+  if(docs.length===0) docs = [{id:'ch1',title:'Chapter 1: When the Clock Stopped',content:'Your chapter text...',published:true}];
+  localStorage.setItem('chapters',JSON.stringify(docs));
+
+  docs.forEach(ch=>{
+    const p = document.createElement('p');
+    const a = document.createElement('a');
+    a.href="#";
+    a.textContent=ch.title;
+    a.onclick=()=>{ continueLink.href="#"; localStorage.setItem('lastChapter',ch.id); showBookmark(ch.id); loadComments(ch.id); }
+    p.appendChild(a);
+    chapterList.appendChild(p);
+
+    const opt = document.createElement('option'); opt.value=ch.id; opt.textContent=ch.title;
+    chapterSelect.appendChild(opt);
+  });
+}
+
+// --- Show bookmark ---
+function showBookmark(id){
+  const chapters = safeParseJSON(localStorage.getItem('chapters'),[]);
+  const ch = chapters.find(c=>c.id===id);
+  if(ch){
+    bookmarkCard.style.display='block';
+    lastReadText.innerText='Last read: '+ch.title;
+    continueLink.href='#';
+  }
+}
+
+// --- Load bookmark ---
+async function loadBookmark(user){
+  try{
+    const snap = await getDoc(doc(db,'bookmarks',user.uid));
+    if(snap.exists()) showBookmark(snap.data().last);
+  } catch(e){
+    const last = localStorage.getItem('lastChapter');
+    if(last) showBookmark(last);
+  }
+}
+
+// --- Post Comment ---
+window.postComment = async ()=>{
+  const text = commentInput.value.trim();
+  const chapter = chapterSelect.value;
+  if(!text) return alert('Enter comment');
+
+  let comments=[];
+  try{
+    const snap = await getDoc(doc(db,'comments',chapter));
+    if(snap.exists()) comments=snap.data().list;
+  } catch(e){
+    comments = safeParseJSON(localStorage.getItem('comments_'+chapter),[]);
+  }
+
+  comments.push({user:auth.currentUser?auth.currentUser.email:'Guest',text,time:Date.now()});
+  try{ await setDoc(doc(db,'comments',chapter),{list:comments}); } catch(e){ localStorage.setItem('comments_'+chapter,JSON.stringify(comments)); }
+  commentInput.value='';
+  loadComments(chapter);
+};
+
+// --- Load Comments ---
+async function loadComments(chapter){
+  commentList.innerHTML='';
+  let comments=[];
+  try{
+    const snap = await getDoc(doc(db,'comments',chapter));
+    if(snap.exists()) comments=snap.data().list;
+  } catch(e){ comments = safeParseJSON(localStorage.getItem('comments_'+chapter),[]); }
+  comments.forEach(c=>{ const p=document.createElement('p'); p.className='comment'; p.innerHTML=`<b>${c.user}</b>: ${c.text}`; commentList.appendChild(p); });
+  totalComments.innerText=comments.length;
+}
+
+// --- Admin Functions ---
+window.addNewChapter = async ()=>{
+  const title=newChapterTitle.value.trim();
+  const content=newChapterContent.value.trim();
+  if(!title||!content) return alert('Fill title & content');
+  const chId='ch'+Date.now();
+  const chapterObj={id:chId,title,content,published:true,publishedAt:Date.now()};
+
+  // Save Firebase
+  try{ await setDoc(doc(db,'chapters',chId),chapterObj); } catch(e){ console.warn('Firebase failed, saved locally'); }
+  // Save localStorage
+  const chapters=safeParseJSON(localStorage.getItem('chapters'),[]);
+  chapters.push(chapterObj); localStorage.setItem('chapters',JSON.stringify(chapters));
+  newChapterTitle.value=''; newChapterContent.value='';
+  loadChapters();
+  alert('Chapter posted');
+}
+
+window.deleteAllComments = async ()=>{
+  const chapters=safeParseJSON(localStorage.getItem('chapters'),[]);
+  chapters.forEach(ch=>{
+    try{ setDoc(doc(db,'comments',ch.id),{list:[]}); } catch(e){ localStorage.setItem('comments_'+ch.id,'[]'); }
+  });
+  loadComments(chapterSelect.value);
+  alert('All comments deleted');
+}
+
+// --- Auth ---
+onAuthStateChanged(auth,user=>{
+  loading.style.display='none';
+  if(user){
+    loginCard.classList.add('hidden');
+    content.classList.remove('hidden');
+    logoutCard.classList.remove('hidden');
+    if(user.email && user.email.toLowerCase()===adminEmail.toLowerCase()) adminPanel.classList.remove('hidden');
+    else adminPanel.classList.add('hidden');
+    loadChapters(); loadComments('ch1'); loadBookmark(user);
+  } else {
+    loginCard.classList.remove('hidden');
+    content.classList.add('hidden');
+    logoutCard.classList.add('hidden');
+  }
+});
+window.login = ()=>signInWithEmailAndPassword(auth,email.value,password.value).catch(e=>alert(e.message));
+window.signup = ()=>{if(password.value!==confirmPassword.value){alert('Passwords do not match');return;}createUserWithEmailAndPassword(auth,email.value,password.value).catch(e=>alert(e.message));};
+window.logout = ()=>signOut(auth);
+window.forgotPassword = ()=>{if(!email.value){alert('Enter email');return;} sendPasswordResetEmail(auth,email.value).then(()=>alert('Reset sent')).catch(e=>alert(e.message));};
+
+// --- Online Users ---
+async function loadOnlineUsers(){
+  onlineUsers.innerHTML='';
+  try{
+    const usersSnap=await getDocs(collection(db,'onlineUsers'));
+    const now=Date.now(); let count=0;
+    usersSnap.forEach(u=>{ const data=u.data(); if(data.lastActive && data.lastActive.toMillis()>now-600000){count++; const li=document.createElement('li'); li.innerText=data.email; onlineUsers.appendChild(li);} });
+    onlineCount.innerText=count;
+  } catch(e){ onlineUsers.innerHTML='<li>Offline</li>'; onlineCount.innerText='?'; }
+}
+
+chapterSelect.addEventListener('change',e=>loadComments(e.target.value));
+
+</script></body>
+</html>
