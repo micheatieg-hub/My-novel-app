@@ -1,0 +1,146 @@
+<!DOCTYPE html><html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Full Novel Reader App</title>
+<style>
+body{font-family:Arial,sans-serif;background:#0f1220;color:#eee;padding:20px}
+.container{max-width:900px;margin:auto}
+.card{background:#1b1f3a;padding:20px;border-radius:12px;margin-bottom:20px}
+h1,h2,h3{margin-top:0}
+button{padding:10px 14px;border:none;border-radius:6px;background:#6c7cff;color:white;cursor:pointer;margin-top:6px}
+button:hover{background:#4f5bff}
+select,textarea,input{width:100%;padding:10px;margin-top:8px;border-radius:6px;border:none}
+.comment{background:#2a2f55;padding:8px;border-radius:6px;margin-top:6px}
+.hidden{display:none}
+</style>
+</head>
+<body><div class="container">
+<h1>📖 My Novel App</h1><div class="card">
+<h2>⚙️ Storage Mode</h2>
+<select id="storageMode">
+<option value="local">Local (No Firebase)</option>
+<option value="firebase">Firebase (Optional)</option>
+</select>
+</div><div class="card">
+<h2>📚 Chapters</h2>
+<div id="chapterList"></div>
+</div><div class="card">
+<h2 id="chapterTitle">Select a chapter</h2>
+<div id="chapterContent">No chapter selected.</div>
+<br>
+<button id="continueBtn">Continue Reading</button>
+</div><div class="card">
+<h2>💬 Comments</h2>
+<select id="chapterSelect"></select>
+<textarea id="commentInput" placeholder="Write a comment..."></textarea>
+<button id="postBtn">Post Comment</button>
+<div id="commentList"></div>
+</div><div class="card">
+<h2>🛠 Admin Panel</h2>
+<input id="newTitle" placeholder="Chapter title">
+<textarea id="newContent" placeholder="Chapter content"></textarea>
+<button id="addChapterBtn">Add Chapter</button>
+</div>
+</div><script>
+// ================== STORAGE MODE ==================
+let mode = localStorage.getItem('mode') || 'local';
+document.getElementById('storageMode').value = mode;
+document.getElementById('storageMode').onchange = e => {
+  mode = e.target.value;
+  localStorage.setItem('mode', mode);
+  location.reload();
+};
+
+// ================== DATA ==================
+let chapters = JSON.parse(localStorage.getItem('chapters')) || [
+  {id:'ch1',title:'Chapter 1: Beginning',content:'This is chapter one.'},
+  {id:'ch2',title:'Chapter 2: Conflict',content:'This is chapter two.'}
+];
+
+let currentChapterId = localStorage.getItem('lastChapter');
+
+// ================== INIT ==================
+renderChapters();
+renderDropdown();
+if(currentChapterId) loadChapter(currentChapterId);
+
+// ================== FUNCTIONS ==================
+function renderChapters(){
+  const list=document.getElementById('chapterList');
+  list.innerHTML='';
+  chapters.forEach(ch=>{
+    const b=document.createElement('button');
+    b.textContent=ch.title;
+    b.onclick=()=>loadChapter(ch.id);
+    list.appendChild(b);
+    list.appendChild(document.createElement('br'));
+  });
+}
+
+function renderDropdown(){
+  const s=document.getElementById('chapterSelect');
+  s.innerHTML='<option value="">Select chapter</option>';
+  chapters.forEach(ch=>{
+    const o=document.createElement('option');
+    o.value=ch.id;o.textContent=ch.title;
+    s.appendChild(o);
+  });
+}
+
+function loadChapter(id){
+  const ch=chapters.find(c=>c.id===id);
+  if(!ch) return;
+  currentChapterId=id;
+  localStorage.setItem('lastChapter',id);
+  document.getElementById('chapterTitle').textContent=ch.title;
+  document.getElementById('chapterContent').textContent=ch.content;
+  document.getElementById('chapterSelect').value=id;
+  loadComments(id);
+}
+
+// ================== CONTINUE ==================
+document.getElementById('continueBtn').onclick=()=>{
+  if(currentChapterId) loadChapter(currentChapterId);
+};
+
+// ================== COMMENTS ==================
+document.getElementById('postBtn').onclick=()=>{
+  const txt=commentInput.value.trim();
+  const cid=chapterSelect.value;
+  if(!txt||!cid) return alert('Select chapter and write comment');
+  const key='comments_'+cid;
+  const arr=JSON.parse(localStorage.getItem(key)||'[]');
+  arr.push({text:txt,time:new Date().toLocaleString()});
+  localStorage.setItem(key,JSON.stringify(arr));
+  commentInput.value='';
+  loadComments(cid);
+};
+
+function loadComments(cid){
+  const list=document.getElementById('commentList');
+  list.innerHTML='';
+  const arr=JSON.parse(localStorage.getItem('comments_'+cid)||'[]');
+  arr.forEach(c=>{
+    const d=document.createElement('div');
+    d.className='comment';
+    d.textContent=`${c.time}: ${c.text}`;
+    list.appendChild(d);
+  });
+}
+
+chapterSelect.onchange=e=>{if(e.target.value) loadChapter(e.target.value)};
+
+// ================== ADMIN ADD CHAPTER ==================
+document.getElementById('addChapterBtn').onclick=()=>{
+  const t=newTitle.value.trim();
+  const c=newContent.value.trim();
+  if(!t||!c) return alert('Title & content required');
+  const id='ch'+Date.now();
+  chapters.push({id,title:t,content:c});
+  localStorage.setItem('chapters',JSON.stringify(chapters));
+  newTitle.value='';newContent.value='';
+  renderChapters();renderDropdown();
+};
+</script></body>
+</html>
