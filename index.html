@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Novel – Home & Admin</title>
+  <meta name="description" content="Read the novel The Silent Hour online." />
+  <style>
+    body{background:#0f1220;color:#eaeaf0;font-family:Inter,Arial,sans-serif;padding:24px;line-height:1.7}
+    .container{max-width:900px;margin:auto}
+    h1,h2,h3{margin-top:0}
+    a{color:#6c7cff;text-decoration:none}
+    .card{background:#1b1f3a;padding:20px;border-radius:12px;margin-bottom:20px}
+    button{padding:10px 14px;border:none;border-radius:6px;background:#6c7cff;color:white;cursor:pointer;margin-top:6px}
+    button:hover{background:#4f5bff}
+    input,textarea,select{width:100%;padding:10px;margin-top:8px;border-radius:6px;border:none}
+    .comment{background:#2a2f55;padding:8px;border-radius:6px;margin-top:6px}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+<div class="container">
+<h1>📖 The Silent Hour</h1>
+<p>A web novel by You</p>
+
+<!-- Chapter List -->
+<div class="card">
+  <h2>📚 Chapters</h2>
+  <ul id="chapterList"></ul>
+</div>
+
+<!-- Continue Reading -->
+<div class="card">
+  <h2>▶ Continue Reading</h2>
+  <p><a href="#" id="continueLink">Continue where you left off</a></p>
+</div>
+
+<!-- Comments -->
+<div class="card">
+  <h2>💬 Comments</h2>
+  <select id="chapterSelect"></select>
+  <textarea id="commentInput" placeholder="Write a comment..."></textarea>
+  <button id="postCommentBtn">Post Comment</button>
+  <div id="commentList"></div>
+</div>
+
+<!-- Admin Panel -->
+<div class="card">
+  <h2>🛠 Admin Panel</h2>
+  <input type="email" id="adminEmail" placeholder="Admin Gmail">
+  <input type="password" id="adminPassword" placeholder="Password">
+  <button id="adminLoginBtn">Login as Admin</button>
+  <div id="adminControls" class="hidden">
+    <h3>Chapter Management</h3>
+    <input id="newTitle" placeholder="New Chapter Title">
+    <textarea id="newContent" placeholder="New Chapter Content"></textarea>
+    <button id="addChapterBtn">Add Chapter</button>
+    <button id="deleteAllChaptersBtn">Delete All Chapters</button>
+
+    <h3>Comments</h3>
+    <button id="deleteAllCommentsBtn">Delete All Comments</button>
+
+    <h3>Online Users</h3>
+    <ul id="onlineUsers"></ul>
+  </div>
+</div>
+
+<!-- About & Privacy -->
+<div class="card">
+  <h2>ℹ️ About</h2>
+  <p>The Silent Hour is a science-fiction fantasy novel about moments outside time and the people who wake within them.</p>
+</div>
+<div class="card">
+  <h2>🔐 Privacy Policy</h2>
+  <p>This site does not collect personal data. Comments are stored locally in your browser only.</p>
+</div>
+
+<footer>
+<p>© 2026 The Silent Hour · <a href="privacy.html">Privacy</a></p>
+</footer>
+
+<script>
+// ================== STATE ==================
+let chapters = JSON.parse(localStorage.getItem('chapters')) || [
+  {id:'chapter1.html',title:'Chapter 1 – The Silent Hour'},
+  {id:'chapter2.html',title:'Chapter 2 – After the Freeze'},
+  {id:'chapter3.html',title:'Chapter 3 – Echoes in Time'}
+];
+let currentChapter = localStorage.getItem('lastChapter');
+let onlineUsers = JSON.parse(localStorage.getItem('onlineUsers')||'[]');
+const adminGmail = 'tiegmicheal@gmail.com';
+
+// ================== INIT ==================
+function renderChapters(){
+  const list = document.getElementById('chapterList');
+  const select = document.getElementById('chapterSelect');
+  list.innerHTML='';
+  select.innerHTML='';
+  chapters.forEach(ch=>{
+    // List
+    const li=document.createElement('li');
+    const a=document.createElement('a');
+    a.href=ch.id;
+    a.textContent=ch.title;
+    a.onclick=()=>{
+      localStorage.setItem('lastChapter',ch.id);
+      updateOnline();
+    };
+    li.appendChild(a);
+    list.appendChild(li);
+    // Dropdown
+    const opt=document.createElement('option');
+    opt.value=ch.id; opt.textContent=ch.title;
+    select.appendChild(opt);
+  });
+}
+renderChapters();
+
+// Continue Reading
+const continueLink = document.getElementById('continueLink');
+continueLink.href = currentChapter || 'chapter1.html';
+
+// ================== COMMENTS ==================
+function loadComments(chId){
+  const listDiv=document.getElementById('commentList');
+  listDiv.innerHTML='';
+  const comments=JSON.parse(localStorage.getItem('comments_'+chId)||'[]');
+  comments.forEach(c=>{
+    const d=document.createElement('div');
+    d.className='comment';
+    d.textContent=c.time+': '+c.text;
+    listDiv.appendChild(d);
+  });
+}
+
+document.getElementById('chapterSelect').onchange = e=>{
+  loadComments(e.target.value);
+};
+
+document.getElementById('postCommentBtn').onclick = ()=>{
+  const chId=document.getElementById('chapterSelect').value;
+  const txt=document.getElementById('commentInput').value.trim();
+  if(!chId || !txt) return alert('Select chapter and enter comment');
+  const comments=JSON.parse(localStorage.getItem('comments_'+chId)||'[]');
+  comments.push({text:txt,time:new Date().toLocaleTimeString()});
+  localStorage.setItem('comments_'+chId,JSON.stringify(comments));
+  document.getElementById('commentInput').value='';
+  loadComments(chId);
+};
+
+// ================== ADMIN LOGIN ==================
+document.getElementById('adminLoginBtn').onclick = ()=>{
+  const email=document.getElementById('adminEmail').value;
+  const pass=document.getElementById('adminPassword').value;
+  if(email===adminGmail && pass==='admin123'){
+    document.getElementById('adminControls').classList.remove('hidden');
+    alert('Admin logged in');
+    updateOnline();
+  }else{
+    alert('Incorrect admin credentials');
+  }
+};
+
+// Add Chapter
+document.getElementById('addChapterBtn').onclick=()=>{
+  const title=document.getElementById('newTitle').value.trim();
+  const content=document.getElementById('newContent').value.trim();
+  if(!title || !content) return alert('Fill both fields');
+  const id='chapter'+Date.now()+'.html';
+  chapters.push({id,title});
+  localStorage.setItem('chapters',JSON.stringify(chapters));
+  renderChapters();
+  alert('Chapter added (remember to create actual HTML file for it)');
+};
+
+// Delete all Chapters
+document.getElementById('deleteAllChaptersBtn').onclick=()=>{
+  if(confirm('Delete all chapters?')){
+    chapters=[];
+    localStorage.setItem('chapters',JSON.stringify(chapters));
+    renderChapters();
+  }
+};
+
+// Delete all Comments
+document.getElementById('deleteAllCommentsBtn').onclick=()=>{
+  chapters.forEach(ch=>{
+    localStorage.removeItem('comments_'+ch.id);
+  });
+  alert('All comments deleted');
+};
+
+// Online Users Tracking
+function updateOnline(){
+  const now=new Date().toLocaleTimeString();
+  if(!onlineUsers.includes(adminGmail)) onlineUsers.push(adminGmail);
+  localStorage.setItem('onlineUsers',JSON.stringify(onlineUsers));
+  const ul=document.getElementById('onlineUsers');
+  ul.innerHTML='';
+  onlineUsers.forEach(u=>{
+    const li=document.createElement('li');
+    li.textContent=u+' (Last online: '+now+')';
+    ul.appendChild(li);
+  });
+}
+updateOnline();
+</script>
+</body>
+</html>
